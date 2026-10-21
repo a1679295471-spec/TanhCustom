@@ -114,7 +114,7 @@ if [ ! -f "$CANN/opp/vendors/customize/op_api/include/aclnn_tanh_custom.h" ]; th
             [ -e "$entry" ] || continue
             base="$(basename "$entry")"
             case "$base" in
-                bin|opp) continue ;;
+                bin|opp|set_env.sh) continue ;;
             esac
             ln -s "$entry" "$TEST_DDK/$base"
         done
@@ -147,6 +147,11 @@ if [ ! -f "$CANN/opp/vendors/customize/op_api/include/aclnn_tanh_custom.h" ]; th
     fi
 fi
 log "test DDK: $TEST_DDK"
+
+if [ -f "$CUSTOM_DIR/bin/set_env.sh" ]; then
+    log "source vendor env: $CUSTOM_DIR/bin/set_env.sh"
+    source "$CUSTOM_DIR/bin/set_env.sh"
+fi
 
 log "run aclnn precision test"
 cd "$TEST_DIR"
