@@ -1,0 +1,7 @@
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/execute_sigmoid_op.dir
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/edit_cache.dir
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/rebuild_cache.dir
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/list_install_components.dir
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/install.dir
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/install/local.dir
+/home/HwHiAiUser/AclNNInvocation/build/CMakeFiles/install/strip.dir
