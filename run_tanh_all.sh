@@ -98,54 +98,55 @@ if ! grep -Rq "TanhCustom" "$CUSTOM_DIR/op_impl" 2>/dev/null; then
     exit 1
 fi
 
-# AclNNInvocation derives its custom-op include path from DDK_PATH=$ASCEND_HOME_DIR,
-# so the installed vendor must be visible under $CANN/opp/vendors/customize.
-TEST_DDK="$CANN"
-if [ ! -f "$CANN/opp/vendors/customize/op_api/include/aclnn_tanh_custom.h" ]; then
-    if mkdir -p "$CANN/opp/vendors/customize" 2>/dev/null &&
-       cp -a "$CUSTOM_DIR/." "$CANN/opp/vendors/customize/" 2>/dev/null; then
-        log "copied op_api into $CANN/opp/vendors/customize"
-    else
-        TEST_DDK="$HOME/.tanh_cann_root"
-        log "preparing shadow toolkit root: $TEST_DDK"
-        rm -rf "$TEST_DDK"
-        mkdir -p "$TEST_DDK/opp/vendors" "$TEST_DDK/bin"
-        for entry in "$CANN"/*; do
-            [ -e "$entry" ] || continue
-            base="$(basename "$entry")"
-            case "$base" in
-                bin|opp|set_env.sh) continue ;;
-            esac
-            ln -s "$entry" "$TEST_DDK/$base"
-        done
-        for entry in "$CANN"/opp/*; do
-            [ -e "$entry" ] || continue
-            base="$(basename "$entry")"
-            [ "$base" = "vendors" ] && continue
-            ln -s "$entry" "$TEST_DDK/opp/$base"
-        done
-        for entry in "$CANN"/opp/vendors/*; do
-            [ -e "$entry" ] || continue
-            base="$(basename "$entry")"
-            [ "$base" = "customize" ] && continue
-            ln -s "$entry" "$TEST_DDK/opp/vendors/$base"
-        done
-        ln -s "$CUSTOM_DIR" "$TEST_DDK/opp/vendors/customize"
-        for entry in "$CANN"/bin/*; do
-            [ -e "$entry" ] || continue
-            base="$(basename "$entry")"
-            [ "$base" = "setenv.bash" ] && continue
-            ln -s "$entry" "$TEST_DDK/bin/$base"
-        done
-        if [ -f "$CANN/bin/setenv.bash" ]; then
-            cp "$CANN/bin/setenv.bash" "$TEST_DDK/bin/setenv.bash"
-        fi
-        if [ -f "$CANN/set_env.sh" ]; then
-            cp "$CANN/set_env.sh" "$TEST_DDK/set_env.sh"
-        fi
-        export ASCEND_CUSTOM_OPP_PATH="$TEST_DDK/opp/vendors"
-    fi
+# AclNNInvocation derives its custom-op include path from DDK_PATH=$ASCEND_HOME_DIR.
+# Always use a private shadow toolkit root: the system CANN dir is read-only here and
+# its setenv.bash would otherwise point ASCEND_OPP_PATH back to the system directory.
+TEST_DDK="$HOME/.tanh_cann_root"
+log "preparing shadow toolkit root: $TEST_DDK"
+rm -rf "$TEST_DDK"
+mkdir -p "$TEST_DDK/opp/vendors" "$TEST_DDK/bin"
+for entry in "$CANN"/*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    case "$base" in
+        bin|opp|set_env.sh) continue ;;
+    esac
+    ln -s "$entry" "$TEST_DDK/$base"
+done
+for entry in "$CANN"/opp/*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    [ "$base" = "vendors" ] && continue
+    ln -s "$entry" "$TEST_DDK/opp/$base"
+done
+for entry in "$CANN"/opp/vendors/*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    [ "$base" = "customize" ] && continue
+    ln -s "$entry" "$TEST_DDK/opp/vendors/$base"
+done
+ln -s "$CUSTOM_DIR" "$TEST_DDK/opp/vendors/customize"
+for entry in "$CANN"/bin/*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    [ "$base" = "setenv.bash" ] && continue
+    ln -s "$entry" "$TEST_DDK/bin/$base"
+done
+if [ -f "$CANN/bin/setenv.bash" ]; then
+    cp "$CANN/bin/setenv.bash" "$TEST_DDK/bin/setenv.bash"
 fi
+if [ -f "$CANN/set_env.sh" ]; then
+    cp "$CANN/set_env.sh" "$TEST_DDK/set_env.sh"
+fi
+cat >> "$TEST_DDK/bin/setenv.bash" <<EOF
+
+# injected by run_tanh_all.sh
+export ASCEND_HOME_PATH="$TEST_DDK"
+export ASCEND_OPP_PATH="$TEST_DDK/opp"
+export ASCEND_CUSTOM_OPP_PATH="$CUSTOM_DIR:$TEST_DDK/opp/vendors"
+export LD_LIBRARY_PATH="$CUSTOM_DIR/op_api/lib:\${LD_LIBRARY_PATH:-}"
+EOF
+export ASCEND_CUSTOM_OPP_PATH="$CUSTOM_DIR:$TEST_DDK/opp/vendors"
 log "test DDK: $TEST_DDK"
 
 if [ -f "$CUSTOM_DIR/bin/set_env.sh" ]; then
@@ -167,6 +168,8 @@ if ! ASCEND_HOME_DIR="$TEST_DDK" bash run.sh; then
     (
         set +u
         source "$TEST_DDK/bin/setenv.bash" >/dev/null 2>&1 || true
+        echo "    ASCEND_OPP_PATH=${ASCEND_OPP_PATH:-<unset>}"
+        echo "    ASCEND_CUSTOM_OPP_PATH=${ASCEND_CUSTOM_OPP_PATH:-<unset>}"
         ldd "$TEST_DIR/output/execute_sigmoid_op" 2>/dev/null | grep -Ei "cust_opapi|ascendcl|nnopbase" || true
     )
     echo "  kernel registration:"
