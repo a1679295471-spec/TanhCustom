@@ -7,18 +7,11 @@ const uint32_t BLOCK_DIM = 8;
 const uint32_t TILE_NUM = 8;
 static ge::graphStatus TilingFunc(gert::TilingContext* context)
 {
-    auto* rawTilingData = context->GetRawTilingData();
-    auto* tiling = reinterpret_cast<TanhCustomTilingData*>(rawTilingData->GetData());
-    auto* xShape = context->GetInputShape(0);
-    uint32_t totalLength = static_cast<uint32_t>(xShape->GetOriginShape().GetShapeSize());
-
-    context->SetBlockDim(BLOCK_DIM);
-    tiling->totalLength = totalLength;
+    TanhCustomTilingData* tiling = context->GetTilingData<TanhCustomTilingData>();
+    tiling->totalLength =
+        static_cast<uint32_t>(context->GetInputShape(0)->GetOriginShape().GetShapeSize());
     tiling->tileNum = TILE_NUM;
-    rawTilingData->SetDataSize(sizeof(TanhCustomTilingData));
-
-    size_t* currentWorkspace = context->GetWorkspaceSizes(1);
-    currentWorkspace[0] = 0;
+    context->SetBlockDim(BLOCK_DIM);
     return ge::GRAPH_SUCCESS;
 }
 }
@@ -62,7 +55,6 @@ public:
         this->AICore()
             .SetTiling(optiling::TilingFunc);
         this->AICore().AddConfig("ascend910b");
-
     }
 };
 

@@ -8,13 +8,15 @@ public:
     __aicore__ inline KernelTanh() {}
     __aicore__ inline void Init(GM_ADDR x, GM_ADDR y, uint32_t totalLength, uint32_t tileNum)
     {
+        ASSERT(AscendC::GetBlockNum() != 0 && "block dim can not be zero!");
         this->blockLength = totalLength / AscendC::GetBlockNum();
         this->tileNum = tileNum;
-        this->tileLength = this->blockLength / this->tileNum / BUFFER_NUM;
+        ASSERT(tileNum != 0 && "tile num can not be zero!");
+        this->tileLength = this->blockLength / tileNum / BUFFER_NUM;
 
-        xGm.SetGlobalBuffer((__gm__ DTYPE_X*)x + this->blockLength * AscendC::GetBlockIdx(),
+        xGm.SetGlobalBuffer((__gm__ DTYPE_X *)x + this->blockLength * AscendC::GetBlockIdx(),
                             this->blockLength);
-        yGm.SetGlobalBuffer((__gm__ DTYPE_Y*)y + this->blockLength * AscendC::GetBlockIdx(),
+        yGm.SetGlobalBuffer((__gm__ DTYPE_Y *)y + this->blockLength * AscendC::GetBlockIdx(),
                             this->blockLength);
 
         pipe.InitBuffer(inQueueX, BUFFER_NUM, this->tileLength * sizeof(DTYPE_X));
@@ -44,21 +46,21 @@ private:
     {
         AscendC::LocalTensor<DTYPE_X> xLocal = inQueueX.DeQue<DTYPE_X>();
         AscendC::LocalTensor<DTYPE_Y> yLocal = outQueueY.AllocTensor<DTYPE_Y>();
-        AscendC::LocalTensor<float> xFloat = tmpBuf0.Get<float>();
-        AscendC::LocalTensor<float> expX = tmpBuf1.Get<float>();
-        AscendC::LocalTensor<float> expNegX = tmpBuf2.Get<float>();
+        AscendC::LocalTensor<float> tmp0 = tmpBuf0.Get<float>();
+        AscendC::LocalTensor<float> tmp1 = tmpBuf1.Get<float>();
+        AscendC::LocalTensor<float> tmp2 = tmpBuf2.Get<float>();
 
-        AscendC::Cast(xFloat, xLocal, AscendC::RoundMode::CAST_NONE, this->tileLength);
-        AscendC::Exp(expX, xFloat, this->tileLength);
-        AscendC::Muls(xFloat, xFloat, (float)-1.0, this->tileLength);
-        AscendC::Exp(expNegX, xFloat, this->tileLength);
-        AscendC::Sub(xFloat, expX, expNegX, this->tileLength);
-        AscendC::Add(expNegX, expX, expNegX, this->tileLength);
-        AscendC::Div(xFloat, xFloat, expNegX, this->tileLength);
-        AscendC::Cast(yLocal, xFloat, AscendC::RoundMode::CAST_RINT, this->tileLength);
+        AscendC::Cast(tmp0, xLocal, AscendC::RoundMode::CAST_NONE, this->tileLength);
+        AscendC::Exp(tmp1, tmp0, this->tileLength);
+        AscendC::Muls(tmp2, tmp0, static_cast<float>(-1.0), this->tileLength);
+        AscendC::Exp(tmp2, tmp2, this->tileLength);
+        AscendC::Sub(tmp0, tmp1, tmp2, this->tileLength);
+        AscendC::Add(tmp1, tmp1, tmp2, this->tileLength);
+        AscendC::Div(tmp2, tmp0, tmp1, this->tileLength);
+        AscendC::Cast(yLocal, tmp2, AscendC::RoundMode::CAST_RINT, this->tileLength);
 
-        inQueueX.FreeTensor(xLocal);
         outQueueY.EnQue(yLocal);
+        inQueueX.FreeTensor(xLocal);
     }
     __aicore__ inline void CopyOut(int32_t progress)
     {
