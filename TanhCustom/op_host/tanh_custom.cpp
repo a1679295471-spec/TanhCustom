@@ -12,6 +12,8 @@ static ge::graphStatus TilingFunc(gert::TilingContext* context)
         static_cast<uint32_t>(context->GetInputShape(0)->GetOriginShape().GetShapeSize());
     tiling->tileNum = TILE_NUM;
     context->SetBlockDim(BLOCK_DIM);
+    size_t* workspace = context->GetWorkspaceSizes(1);
+    workspace[0] = 0;
     return ge::GRAPH_SUCCESS;
 }
 }

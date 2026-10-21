@@ -159,8 +159,26 @@ mkdir -p input output
 rm -rf build
 if ! ASCEND_HOME_DIR="$TEST_DDK" bash run.sh; then
     echo ""
-    echo "test failed, recent CANN errors:"
-    grep -RniE "TanhCustom|161001|Get regInfo failed|not support opType" "$HOME/ascend/log" 2>/dev/null | tail -30 || true
+    echo "test failed, diagnostics:"
+    echo "  ASCEND_OPP_PATH=${ASCEND_OPP_PATH:-<unset>}"
+    echo "  ASCEND_CUSTOM_OPP_PATH=${ASCEND_CUSTOM_OPP_PATH:-<unset>}"
+    echo "  installed vendor: $CUSTOM_DIR"
+    echo "  runtime libraries:"
+    (
+        set +u
+        source "$TEST_DDK/bin/setenv.bash" >/dev/null 2>&1 || true
+        ldd "$TEST_DIR/output/execute_sigmoid_op" 2>/dev/null | grep -Ei "cust_opapi|ascendcl|nnopbase" || true
+    )
+    echo "  kernel registration:"
+    grep -Rl "TanhCustom" "$CUSTOM_DIR/op_impl" 2>/dev/null | head -10 || true
+    find "$CUSTOM_DIR/op_impl" -type f 2>/dev/null | grep -Ei "tanh_custom|binary_info_config" | head -20 || true
+    echo "  rerun with CANN error logs:"
+    (
+        cd "$TEST_DIR/output"
+        set +u
+        source "$TEST_DDK/bin/setenv.bash" >/dev/null 2>&1 || true
+        ASCEND_SLOG_PRINT_TO_STDOUT=1 ASCEND_GLOBAL_LOG_LEVEL=1 ./execute_sigmoid_op
+    ) 2>&1 | tail -60 || true
     exit 1
 fi
 
