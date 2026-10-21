@@ -29,6 +29,6 @@ cmake_version=$(cmake --version | grep "cmake version" | awk '{print $3}')
 target=package
 if [ "$1"x != ""x ]; then target=$1; fi
 
-cmake -S . -B "$BUILD_DIR" --preset=default
+cmake -S . -B "$BUILD_DIR" --preset=default -DASCEND_CANN_PACKAGE_PATH="$ASCEND_HOME_PATH"
 cmake --build "$BUILD_DIR" --target binary -j$(nproc)
 cmake --build "$BUILD_DIR" --target $target -j$(nproc)
