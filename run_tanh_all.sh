@@ -138,6 +138,8 @@ fi
 if [ -f "$CANN/set_env.sh" ]; then
     cp "$CANN/set_env.sh" "$TEST_DDK/set_env.sh"
 fi
+touch "$TEST_DDK/bin/setenv.bash"
+chmod u+w "$TEST_DDK/bin/setenv.bash"
 cat >> "$TEST_DDK/bin/setenv.bash" <<EOF
 
 # injected by run_tanh_all.sh
