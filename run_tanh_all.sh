@@ -72,30 +72,87 @@ log "install operator package"
 cd "$OP_DIR/build_out"
 if ! ./"$(basename "$RUN_PKG")"; then
     log "default install failed, retry into $HOME/Ascend/opp"
-    ./"$(basename "$RUN_PKG")" --install-path="$HOME/Ascend/opp"
-    export ASCEND_CUSTOM_OPP_PATH="$HOME/Ascend/opp/vendors"
+    ./"$(basename "$RUN_PKG")" --install-path="$HOME/Ascend/opp" || {
+        echo "ERROR: operator package install failed"
+        exit 1
+    }
 fi
 
-VENDOR="${ASCEND_CUSTOM_OPP_PATH:-$ASCEND_OPP_PATH/vendors}/customize"
-log "vendor dir: $VENDOR"
-test -f "$VENDOR/op_api/include/aclnn_tanh_custom.h" || {
-    echo "ERROR: aclnn_tanh_custom.h not installed under $VENDOR"
+HEADER="$(find "$HOME/Ascend" "$CANN" "${ASCEND_OPP_PATH:-}" /usr/local/Ascend \
+    -name aclnn_tanh_custom.h 2>/dev/null | head -1 || true)"
+if [ -z "$HEADER" ]; then
+    echo "ERROR: aclnn_tanh_custom.h was not installed"
+    echo "checked under: $HOME/Ascend and $CANN"
     exit 1
-}
+fi
+CUSTOM_DIR="$(cd "$(dirname "$HEADER")/../.." && pwd)"
+VENDOR_ROOT="$(cd "$CUSTOM_DIR/.." && pwd)"
+export ASCEND_CUSTOM_OPP_PATH="$VENDOR_ROOT"
+log "installed vendor: $CUSTOM_DIR"
 
-if ! grep -Rq "TanhCustom" "$VENDOR/op_impl" 2>/dev/null; then
+if ! grep -Rq "TanhCustom" "$CUSTOM_DIR/op_impl" 2>/dev/null; then
     echo "ERROR: TanhCustom is missing from the installed kernel config"
-    find "$VENDOR/op_impl" -name "binary_info_config.json" 2>/dev/null | head -5
+    find "$CUSTOM_DIR/op_impl" -name "binary_info_config.json" 2>/dev/null | head -5 || true
     echo "Kernel build logs:"
     find "$OP_DIR/build_out" -path "*build_logs*" -type f 2>/dev/null | head -20 || true
     exit 1
 fi
 
+# AclNNInvocation derives its custom-op include path from DDK_PATH=$ASCEND_HOME_DIR,
+# so the installed vendor must be visible under $CANN/opp/vendors/customize.
+TEST_DDK="$CANN"
+if [ ! -f "$CANN/opp/vendors/customize/op_api/include/aclnn_tanh_custom.h" ]; then
+    if mkdir -p "$CANN/opp/vendors/customize" 2>/dev/null &&
+       cp -a "$CUSTOM_DIR/." "$CANN/opp/vendors/customize/" 2>/dev/null; then
+        log "copied op_api into $CANN/opp/vendors/customize"
+    else
+        TEST_DDK="$HOME/.tanh_cann_root"
+        log "preparing shadow toolkit root: $TEST_DDK"
+        rm -rf "$TEST_DDK"
+        mkdir -p "$TEST_DDK/opp/vendors" "$TEST_DDK/bin"
+        for entry in "$CANN"/*; do
+            [ -e "$entry" ] || continue
+            base="$(basename "$entry")"
+            case "$base" in
+                bin|opp) continue ;;
+            esac
+            ln -s "$entry" "$TEST_DDK/$base"
+        done
+        for entry in "$CANN"/opp/*; do
+            [ -e "$entry" ] || continue
+            base="$(basename "$entry")"
+            [ "$base" = "vendors" ] && continue
+            ln -s "$entry" "$TEST_DDK/opp/$base"
+        done
+        for entry in "$CANN"/opp/vendors/*; do
+            [ -e "$entry" ] || continue
+            base="$(basename "$entry")"
+            [ "$base" = "customize" ] && continue
+            ln -s "$entry" "$TEST_DDK/opp/vendors/$base"
+        done
+        ln -s "$CUSTOM_DIR" "$TEST_DDK/opp/vendors/customize"
+        for entry in "$CANN"/bin/*; do
+            [ -e "$entry" ] || continue
+            base="$(basename "$entry")"
+            [ "$base" = "setenv.bash" ] && continue
+            ln -s "$entry" "$TEST_DDK/bin/$base"
+        done
+        if [ -f "$CANN/bin/setenv.bash" ]; then
+            cp "$CANN/bin/setenv.bash" "$TEST_DDK/bin/setenv.bash"
+        fi
+        if [ -f "$CANN/set_env.sh" ]; then
+            cp "$CANN/set_env.sh" "$TEST_DDK/set_env.sh"
+        fi
+        export ASCEND_CUSTOM_OPP_PATH="$TEST_DDK/opp/vendors"
+    fi
+fi
+log "test DDK: $TEST_DDK"
+
 log "run aclnn precision test"
 cd "$TEST_DIR"
 mkdir -p input output
 rm -rf build
-if ! ASCEND_HOME_DIR="$CANN" bash run.sh; then
+if ! ASCEND_HOME_DIR="$TEST_DDK" bash run.sh; then
     echo ""
     echo "test failed, recent CANN errors:"
     grep -RniE "TanhCustom|161001|Get regInfo failed|not support opType" "$HOME/ascend/log" 2>/dev/null | tail -30 || true
