@@ -6,11 +6,13 @@ log() { echo ""; echo "[$(date +%H:%M:%S)] $*"; }
 find_cann() {
     local c
     for c in "${CANN_ROOT:-}" \
-             /opt/atomgit/Ascend/ascend-toolkit/latest \
-             "$HOME/Ascend/ascend-toolkit/latest" \
+             "${ASCEND_HOME_PATH:-}" \
              "${ASCEND_HOME_DIR:-}" \
+             /usr/local/Ascend/cann-8.5.0 \
              /usr/local/Ascend/ascend-toolkit/latest \
-             "${ASCEND_HOME_PATH:-}"; do
+             "$HOME/Ascend/ascend-toolkit/latest" \
+             /opt/atomgit/Ascend/cann \
+             /opt/atomgit/Ascend/ascend-toolkit/latest; do
         if [ -n "$c" ] && { [ -f "$c/set_env.sh" ] || [ -f "$c/bin/setenv.bash" ]; }; then
             echo "$c"
             return 0
@@ -30,6 +32,9 @@ else
 fi
 
 log "CANN=$CANN"
+if [ -f "$CANN/version.cfg" ]; then
+    log "CANN version: $(head -3 "$CANN/version.cfg" | tr '\n' ' ')"
+fi
 log "device:"
 npu-smi info 2>/dev/null | head -15 || true
 log "ASCEND_HOME_PATH=${ASCEND_HOME_PATH:-<unset>}"
